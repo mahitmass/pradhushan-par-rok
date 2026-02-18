@@ -1,0 +1,39 @@
+/* FORCE Dark Mode & White Text for All Devices */
+body, .stApp {
+    background-color: #0E1117;
+    color: #FFFFFF !important;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Fix Samsung Internet / Mobile Inputs */
+input, textarea, select, .stTextInput > div > div > input {
+    color: #FFFFFF !important;
+    background-color: #262730 !important;
+    border: 1px solid #4A4A4A;
+}
+
+/* Card Styling for "Spacious" Look */
+div[data-testid="stMetricValue"] {
+    font-size: 2rem !important;
+    color: #00D4FF !important;
+}
+
+.css-1r6slb0 {
+    background-color: #1E1E1E;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+/* Headings */
+h1 {
+    background: -webkit-linear-gradient(45deg, #00D4FF, #00FF94);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 3rem !important;
+    font-weight: 800 !important;
+}
+
+h2, h3 {
+    color: #E0E0E0 !important;
+}
