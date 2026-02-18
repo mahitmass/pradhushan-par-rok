@@ -1,0 +1,44 @@
+name: Auto-Train AI Model
+
+# Trigger: Run this ONLY when 'train_model.py' or the 'data' changes
+on:
+  push:
+    paths:
+      - 'models/train_model.py'
+      - 'data/**'
+      - '.github/workflows/train_ai.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  train-and-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Get your code
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    # 2. Install Python
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    # 3. Install Libraries (Pandas, Scikit-Learn, etc.)
+    - name: Install Dependencies
+      run: |
+        pip install -r requirements.txt
+
+    # 4. Run the Training Script
+    - name: Train Model
+      run: |
+        python models/train_model.py
+
+    # 5. Save the new Brain (.pkl) back to GitHub
+    - name: Commit and Push Model
+      uses: stefanzweifel/git-auto-commit-action@v4
+      with:
+        commit_message: "🤖 Auto-trained new AI model [skip ci]"
+        file_pattern: 'models/pollution_model.pkl'
