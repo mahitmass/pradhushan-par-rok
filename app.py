@@ -395,7 +395,7 @@ elif selected_tab == "PROTOCOLS":
     
     # Logic: 450+ is RED and GRAP 4
     if base_aqi >= 450:
-        curr_color = "#1df53e" # RED
+        curr_color = "#ff0000" # RED
         curr_stage = "GRAP STAGE IV (SEVERE+)"
     elif base_aqi >= 400:
         curr_color = "#7E0023" # Maroon/Dark
