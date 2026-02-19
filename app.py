@@ -144,7 +144,7 @@ model = load_model()
 c_logo, c_nav = st.columns([1, 4])
 with c_logo:
     st.title("AIRSCRIBE")
-    st.caption("NEXUS v8.0")
+    st.caption("NEXUS v9.0 (Census Data Integrated)")
 with c_nav:
     selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], 
         horizontal=True, label_visibility="collapsed")
@@ -158,16 +158,39 @@ if selected_tab == "DASHBOARD":
     
     st.markdown("### 📍 Select Monitoring Station")
     
-    # --- REAL-WORLD REGION DATA ---
+    # --- REAL-WORLD REGION DATA (Census Integrated) ---
     region_intel = {
-        "Anand Vihar": {"aqi_offset": 55, "pop": 3.2, "schools": 18},
-        "Okhla Phase-2": {"aqi_offset": 40, "pop": 4.5, "schools": 12},
-        "ITO": {"aqi_offset": 35, "pop": 2.1, "schools": 8},
-        "Punjabi Bagh": {"aqi_offset": 25, "pop": 2.8, "schools": 15},
-        "Dwarka": {"aqi_offset": -15, "pop": 5.0, "schools": 32},
-        "Vasant Kunj": {"aqi_offset": -25, "pop": 1.5, "schools": 14},
-        "Cyber City": {"aqi_offset": 20, "pop": 1.2, "schools": 5},
-        "Sector 62": {"aqi_offset": 15, "pop": 2.5, "schools": 22},
+        # Major / Sub-City Areas
+        "Dwarka": {"aqi_offset": -15, "pop": 11.0, "pop_display": "~11.0 Lakhs", "schools": 32},
+        "Rohini": {"aqi_offset": 10, "pop": 8.5, "pop_display": "~8.5 Lakhs", "schools": 45},
+        "Narela": {"aqi_offset": 20, "pop": 2.45, "pop_display": "~2.45 Lakhs", "schools": 12},
+        "Najafgarh": {"aqi_offset": 5, "pop": 2.85, "pop_display": "~2.85 Lakhs", "schools": 20},
+        
+        # Large Residential Neighbourhoods
+        "Pitampura": {"aqi_offset": 15, "pop": 2.4, "pop_display": "~2.4 Lakhs", "schools": 20},
+        "Punjabi Bagh": {"aqi_offset": 25, "pop": 1.15, "pop_display": "~1.15 Lakhs", "schools": 15},
+        "Ashok Vihar": {"aqi_offset": 15, "pop": 1.35, "pop_display": "~1.35 Lakhs", "schools": 10},
+        "Jahangirpuri": {"aqi_offset": 30, "pop": 3.1, "pop_display": "~3.1 Lakhs", "schools": 15},
+        "Vasant Kunj": {"aqi_offset": -25, "pop": 1.75, "pop_display": "~1.75 Lakhs", "schools": 14},
+        "RK Puram": {"aqi_offset": -10, "pop": 1.4, "pop_display": "~1.4 Lakhs", "schools": 12},
+        
+        # Smaller Localities / Commercial or Mixed Areas
+        "Anand Vihar": {"aqi_offset": 55, "pop": 0.5, "pop_display": "~0.5 Lakhs", "schools": 18},
+        "Patparganj": {"aqi_offset": 20, "pop": 0.85, "pop_display": "~0.85 Lakhs", "schools": 10},
+        "Sonia Vihar": {"aqi_offset": 25, "pop": 0.95, "pop_display": "~0.95 Lakhs", "schools": 8},
+        "Bawana": {"aqi_offset": 35, "pop": 1.05, "pop_display": "~1.05 Lakhs", "schools": 8},
+        "Okhla Phase-2": {"aqi_offset": 40, "pop": 0.3, "pop_display": "~0.3 Lakhs (industrial)", "schools": 5},
+        "ITO": {"aqi_offset": 35, "pop": 0.1, "pop_display": "~0.1 Lakhs (office area)", "schools": 2},
+        "India Gate": {"aqi_offset": 5, "pop": 0.01, "pop_display": "None (office area)", "schools": 0},
+        "Mandir Marg": {"aqi_offset": 10, "pop": 0.05, "pop_display": "~0.05 Lakhs (office area)", "schools": 2},
+        
+        # Missing from dataset but in dropdown (Apply ~50k rule)
+        "Kashmere Gate": {"aqi_offset": 30, "pop": 0.5, "pop_display": "~0.5 Lakhs (office area)", "schools": 5},
+        "Siri Fort": {"aqi_offset": -5, "pop": 0.5, "pop_display": "~0.5 Lakhs (office area)", "schools": 4},
+        
+        # NCR Exurbs
+        "Cyber City": {"aqi_offset": 20, "pop": 1.2, "pop_display": "~1.2 Lakhs", "schools": 5},
+        "Sector 62": {"aqi_offset": 15, "pop": 2.5, "pop_display": "~2.5 Lakhs", "schools": 22},
     }
     
     loc_data = {
@@ -184,15 +207,14 @@ if selected_tab == "DASHBOARD":
     with c_loc2:
         selected_zone = st.selectbox("Region/Zone", loc_data[selected_city][:30])
         
-    # --- THE FIX: DYNAMIC FALLBACK ---
-    # If the place is not hardcoded, use math to give it unique but consistent stats
+    # --- DYNAMIC FALLBACK (If region not found in dictionary) ---
     dyn_offset = (len(selected_zone) * 12 + ord(selected_zone[0])) % 80 - 40
-    dyn_pop = round((len(selected_zone) % 6) + 1.2, 1)
+    dyn_pop = 0.5
+    dyn_pop_display = "~0.5 Lakhs (office area)"
     dyn_schools = (len(selected_zone) * 3) % 25 + 5
     
-    current_intel = {"aqi_offset": dyn_offset, "pop": dyn_pop, "schools": dyn_schools}
+    current_intel = {"aqi_offset": dyn_offset, "pop": dyn_pop, "pop_display": dyn_pop_display, "schools": dyn_schools}
     
-    # Overwrite dynamic stats if the place IS in our hardcoded dictionary
     for key in region_intel:
         if key in selected_zone:
             current_intel = region_intel[key]
@@ -205,7 +227,7 @@ if selected_tab == "DASHBOARD":
         m1.markdown(f"**City:** {selected_city}")
         m2.markdown(f"**Zone:** {selected_zone}")
         m3.markdown(f"**Nearby Schools:** {current_intel['schools']}")
-        m4.markdown(f"**Pop. Affected:** ~{current_intel['pop']} Lakhs")
+        m4.markdown(f"**Pop. Affected:** {current_intel['pop_display']}")
 
     c1, c2 = st.columns([2, 1])
     
@@ -233,7 +255,14 @@ if selected_tab == "DASHBOARD":
         with k2:
             st.markdown(f'<div class="glass-card" style="border-left: 4px solid {color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{status}</p></div>', unsafe_allow_html=True)
         with k3:
-            eco_loss = round((live_aqi * 0.005) * current_intel["pop"], 2)
+            # --- CRISIS MULTIPLIER (Health Costs Surge in Red Zones) ---
+            crisis_multiplier = 1.0
+            if live_aqi >= 450:
+                crisis_multiplier = 2.5
+            elif live_aqi >= 400:
+                crisis_multiplier = 1.5
+                
+            eco_loss = round((live_aqi * 0.005) * current_intel["pop"] * crisis_multiplier, 2)
             st.markdown(f'<div class="glass-card" style="border-left: 4px solid #00d4ff"><h3>ECONOMY LOSS</h3><p class="metric-value" style="color:#00d4ff">₹{eco_loss} Cr</p><p class="sub-metric">Daily Estimate</p></div>', unsafe_allow_html=True)
 
         d1, d2 = st.columns([1, 2])
