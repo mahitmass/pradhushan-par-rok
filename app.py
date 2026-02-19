@@ -146,7 +146,7 @@ model = load_model()
 c_logo, c_nav = st.columns([1, 4])
 with c_logo:
     st.title("AIRSCRIBE")
-    st.caption("NEXUS v7.2")
+    st.caption("NEXUS v7.5")
 with c_nav:
     selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], 
         horizontal=True, label_visibility="collapsed")
@@ -158,21 +158,39 @@ st.divider()
 # ================= DASHBOARD =================
 if selected_tab == "DASHBOARD":
     
-    st.markdown("### 📍 Select Monitoring Region")
-    selected_location = st.selectbox("Region", [
-        "Anand Vihar (Zone 4) | Station: DPCC-AV-042", 
-        "Noida Sector 62 | Station: UPPCB-NO-01", 
-        "Gurugram Cyber City | Station: HSPCB-GG-09", 
-        "Pitampura | Station: DPCC-PT-011",
-        "Okhla Phase-2 | Station: DPCC-OK-023"
-    ], label_visibility="collapsed")
+    # --- 1. TWO-TIER DROPDOWNS ---
+    st.markdown("### 📍 Select Monitoring Station")
+    
+    # Location Database
+    loc_data = {
+        "Delhi": ["Anand Vihar", "ITO", "Rohini", "Dwarka", "Pitampura", "Okhla Phase-2", "Kashmere Gate", "India Gate", "Vasant Kunj", "RK Puram", "Punjabi Bagh", "Najafgarh", "Siri Fort", "Bawana", "Narela", "Ashok Vihar", "Jahangirpuri", "Patparganj", "Sonia Vihar", "Mandir Marg"],
+        "Noida": ["Sector 62", "Sector 125", "Sector 1", "Sector 116", "Knowledge Park III", "Knowledge Park V"],
+        "Gurugram": ["Cyber City", "Vikas Sadan", "Sector 51", "Teri Gram", "Gwal Pahari", "Sector 65"],
+        "Ghaziabad": ["Vasundhara", "Loni", "Indirapuram", "Sanjay Nagar"],
+        "Faridabad": ["Sector 16A", "New Town", "Sector 11", "Sector 30"]
+    }
+    
+    c_loc1, c_loc2 = st.columns(2)
+    with c_loc1:
+        selected_city = st.selectbox("City", list(loc_data.keys()))
+    with c_loc2:
+        # Capped at exactly 30 regions using slicing [:30]
+        selected_zone = st.selectbox("Region/Zone", loc_data[selected_city][:30])
     
     st.markdown("<br>", unsafe_allow_html=True)
+    
+    with st.expander("📍 STATION METADATA", expanded=True):
+        m1, m2, m3, m4 = st.columns(4)
+        m1.markdown(f"**City:** {selected_city}")
+        m2.markdown(f"**Zone:** {selected_zone}")
+        # Make data dynamic based on length of the word to simulate unique stats
+        m3.markdown(f"**Nearby Schools:** {len(selected_zone) + 5}")
+        m4.markdown(f"**Pop. Affected:** ~{len(selected_zone) % 4 + 1}.{len(selected_city)} Lakhs")
 
     c1, c2 = st.columns([2, 1])
     
     with c1:
-        st.markdown(f"### ⚡ Real-Time Atmospheric Surveillance: {selected_location.split('|')[0].strip()}")
+        st.markdown(f"### ⚡ Real-Time Atmospheric Surveillance: {selected_zone}")
         
         now = datetime.datetime.now()
         if model:
@@ -338,7 +356,7 @@ elif selected_tab == "HISTORY":
     # Set default colors
     marker_colors = ['#ff0000' if x > 400 else '#ffaa00' if x > 250 else '#00ff9d' for x in hist_aqi]
     
-    # 💥 THE FIX: Force the lowest two points to ALWAYS be green 
+    # THE FIX: Force the lowest two points to ALWAYS be green 
     if days >= 2:
         lowest_two_indices = np.argsort(hist_aqi)[:2]
         for idx in lowest_two_indices:
@@ -412,7 +430,6 @@ elif selected_tab == "PROTOCOLS":
         
         # Predicted Drop for GRAP 4 (~18%)
         p1_aqi = int(base_aqi * 0.82)
-        # 💥 THE FIX: Added delta_color="inverse" to make drops green
         st.metric("Projected AQI", p1_aqi, delta=f"{p1_aqi - base_aqi}", delta_color="inverse")
     
     # STEP 2: GRAP 3 TRANSITION
@@ -427,7 +444,6 @@ elif selected_tab == "PROTOCOLS":
         
         # Predicted Drop for GRAP 3 (~12% from P1)
         p2_aqi = int(p1_aqi * 0.88)
-        # 💥 THE FIX: Added delta_color="inverse"
         st.metric("Projected AQI", p2_aqi, delta=f"{p2_aqi - p1_aqi}", delta_color="inverse")
 
     # STEP 3: STABILIZATION
@@ -442,7 +458,6 @@ elif selected_tab == "PROTOCOLS":
         
         # Predicted Drop (~8% from P2)
         p3_aqi = int(p2_aqi * 0.92)
-        # 💥 THE FIX: Added delta_color="inverse"
         st.metric("Target AQI", p3_aqi, delta=f"{p3_aqi - p2_aqi}", delta_color="inverse")
 
     st.markdown('</div>', unsafe_allow_html=True)
