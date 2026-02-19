@@ -144,7 +144,7 @@ model = load_model()
 c_logo, c_nav = st.columns([1, 4])
 with c_logo:
     st.title("AIRSCRIBE")
-    st.caption("NEXUS v9.0 (Census Data Integrated)")
+    st.caption("NEXUS v10.0 (API Integrated)")
 with c_nav:
     selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], 
         horizontal=True, label_visibility="collapsed")
@@ -158,23 +158,17 @@ if selected_tab == "DASHBOARD":
     
     st.markdown("### 📍 Select Monitoring Station")
     
-    # --- REAL-WORLD REGION DATA (Census Integrated) ---
     region_intel = {
-        # Major / Sub-City Areas
         "Dwarka": {"aqi_offset": -15, "pop": 11.0, "pop_display": "~11.0 Lakhs", "schools": 32},
         "Rohini": {"aqi_offset": 10, "pop": 8.5, "pop_display": "~8.5 Lakhs", "schools": 45},
         "Narela": {"aqi_offset": 20, "pop": 2.45, "pop_display": "~2.45 Lakhs", "schools": 12},
         "Najafgarh": {"aqi_offset": 5, "pop": 2.85, "pop_display": "~2.85 Lakhs", "schools": 20},
-        
-        # Large Residential Neighbourhoods
         "Pitampura": {"aqi_offset": 15, "pop": 2.4, "pop_display": "~2.4 Lakhs", "schools": 20},
         "Punjabi Bagh": {"aqi_offset": 25, "pop": 1.15, "pop_display": "~1.15 Lakhs", "schools": 15},
         "Ashok Vihar": {"aqi_offset": 15, "pop": 1.35, "pop_display": "~1.35 Lakhs", "schools": 10},
         "Jahangirpuri": {"aqi_offset": 30, "pop": 3.1, "pop_display": "~3.1 Lakhs", "schools": 15},
         "Vasant Kunj": {"aqi_offset": -25, "pop": 1.75, "pop_display": "~1.75 Lakhs", "schools": 14},
         "RK Puram": {"aqi_offset": -10, "pop": 1.4, "pop_display": "~1.4 Lakhs", "schools": 12},
-        
-        # Smaller Localities / Commercial or Mixed Areas
         "Anand Vihar": {"aqi_offset": 55, "pop": 0.5, "pop_display": "~0.5 Lakhs", "schools": 18},
         "Patparganj": {"aqi_offset": 20, "pop": 0.85, "pop_display": "~0.85 Lakhs", "schools": 10},
         "Sonia Vihar": {"aqi_offset": 25, "pop": 0.95, "pop_display": "~0.95 Lakhs", "schools": 8},
@@ -183,12 +177,8 @@ if selected_tab == "DASHBOARD":
         "ITO": {"aqi_offset": 35, "pop": 0.1, "pop_display": "~0.1 Lakhs (office area)", "schools": 2},
         "India Gate": {"aqi_offset": 5, "pop": 0.01, "pop_display": "None (office area)", "schools": 0},
         "Mandir Marg": {"aqi_offset": 10, "pop": 0.05, "pop_display": "~0.05 Lakhs (office area)", "schools": 2},
-        
-        # Missing from dataset but in dropdown (Apply ~50k rule)
         "Kashmere Gate": {"aqi_offset": 30, "pop": 0.5, "pop_display": "~0.5 Lakhs (office area)", "schools": 5},
         "Siri Fort": {"aqi_offset": -5, "pop": 0.5, "pop_display": "~0.5 Lakhs (office area)", "schools": 4},
-        
-        # NCR Exurbs
         "Cyber City": {"aqi_offset": 20, "pop": 1.2, "pop_display": "~1.2 Lakhs", "schools": 5},
         "Sector 62": {"aqi_offset": 15, "pop": 2.5, "pop_display": "~2.5 Lakhs", "schools": 22},
     }
@@ -207,7 +197,6 @@ if selected_tab == "DASHBOARD":
     with c_loc2:
         selected_zone = st.selectbox("Region/Zone", loc_data[selected_city][:30])
         
-    # --- DYNAMIC FALLBACK (If region not found in dictionary) ---
     dyn_offset = (len(selected_zone) * 12 + ord(selected_zone[0])) % 80 - 40
     dyn_pop = 0.5
     dyn_pop_display = "~0.5 Lakhs (office area)"
@@ -255,7 +244,6 @@ if selected_tab == "DASHBOARD":
         with k2:
             st.markdown(f'<div class="glass-card" style="border-left: 4px solid {color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{status}</p></div>', unsafe_allow_html=True)
         with k3:
-            # --- CRISIS MULTIPLIER (Health Costs Surge in Red Zones) ---
             crisis_multiplier = 1.0
             if live_aqi >= 450:
                 crisis_multiplier = 2.5
@@ -320,13 +308,8 @@ elif selected_tab == "FORECAST":
     
     with c_ctrl:
         st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-        st.markdown("#### 📝 Sensor Data Entry")
-        st.info("Input upcoming meteorological data.")
-        
-        in_temp = st.number_input("Temperature (°C)", value=20.0, step=0.5)
-        in_wind = st.number_input("Wind Speed (km/h)", value=5.0, step=0.5)
-        in_humid = st.number_input("Humidity (%)", value=60.0, step=1.0)
-        in_vis = st.number_input("Visibility (km)", value=2.0, step=0.1)
+        st.markdown("#### 📅 Temporal Targeting")
+        st.info("Select a timeframe. AI will pull meteorological forecasts automatically via Open-Meteo API.")
         
         in_date = st.date_input("Target Date", datetime.date.today())
         in_time = st.number_input("Hour of Day (0-23)", min_value=0, max_value=23, value=12, step=1)
@@ -335,6 +318,35 @@ elif selected_tab == "FORECAST":
     with c_main:
         if model:
             try:
+                # --- AUTO-FETCH WEATHER DATA FROM OPEN-METEO ---
+                with st.spinner("Intercepting satellite weather feeds..."):
+                    # Call Open-Meteo API for Delhi coordinates
+                    url = f"https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,visibility&timezone=Asia%2FKolkata"
+                    req = requests.get(url)
+                    weather_data = req.json()
+                    
+                    target_time_str = f"{in_date.strftime('%Y-%m-%d')}T{in_time:02d}:00"
+                    
+                    if target_time_str in weather_data['hourly']['time']:
+                        idx = weather_data['hourly']['time'].index(target_time_str)
+                        in_temp = round(weather_data['hourly']['temperature_2m'][idx], 1)
+                        in_humid = round(weather_data['hourly']['relative_humidity_2m'][idx], 1)
+                        in_wind = round(weather_data['hourly']['wind_speed_10m'][idx], 1)
+                        in_vis = round(weather_data['hourly']['visibility'][idx] / 1000.0, 1) # Convert to km
+                    else:
+                        in_temp, in_humid, in_wind, in_vis = 20.0, 60.0, 5.0, 2.0
+                        st.warning("⚠️ Date out of 7-day API forecast range. Using fallback averages.")
+
+                # Display the fetched data
+                st.markdown("##### 📡 Intercepted Meteorological Forecast")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Temp", f"{in_temp}°C")
+                m2.metric("Humidity", f"{in_humid}%")
+                m3.metric("Wind", f"{in_wind} km/h")
+                m4.metric("Visibility", f"{in_vis} km")
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Make Prediction
                 f_inputs = [[in_time, in_date.month, in_date.weekday(), in_temp, in_humid, in_wind, in_vis]]
                 pred_aqi = int(model.predict(f_inputs)[0])
                 
