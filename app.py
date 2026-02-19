@@ -114,7 +114,6 @@ def load_model():
     model_path = os.path.join('models', 'pollution_model.pkl')
     data_path = os.path.join('data', 'delhi_ncr_aqi_dataset.csv')
     
-    # Try Loading Existing Brain
     if os.path.exists(model_path):
         try:
             model = joblib.load(model_path)
@@ -123,7 +122,6 @@ def load_model():
         except Exception:
             pass 
 
-    # Emergency Re-Training
     try:
         if not os.path.exists(data_path): return None
         df = pd.read_csv(data_path)
@@ -146,7 +144,7 @@ model = load_model()
 c_logo, c_nav = st.columns([1, 4])
 with c_logo:
     st.title("AIRSCRIBE")
-    st.caption("NEXUS v7.5")
+    st.caption("NEXUS v8.0")
 with c_nav:
     selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], 
         horizontal=True, label_visibility="collapsed")
@@ -158,26 +156,20 @@ st.divider()
 # ================= DASHBOARD =================
 if selected_tab == "DASHBOARD":
     
-    # --- 1. TWO-TIER DROPDOWNS ---
     st.markdown("### 📍 Select Monitoring Station")
     
     # --- REAL-WORLD REGION DATA ---
-    # Format: "Zone Name": {"aqi_offset": pollution_penalty, "pop": population_in_lakhs, "schools": nearby_schools}
     region_intel = {
-        "Anand Vihar": {"aqi_offset": 55, "pop": 3.2, "schools": 18}, # Heavy traffic/bus terminal
-        "Okhla Phase-2": {"aqi_offset": 40, "pop": 4.5, "schools": 12}, # Industrial
-        "ITO": {"aqi_offset": 35, "pop": 2.1, "schools": 8}, # Traffic bottleneck
+        "Anand Vihar": {"aqi_offset": 55, "pop": 3.2, "schools": 18},
+        "Okhla Phase-2": {"aqi_offset": 40, "pop": 4.5, "schools": 12},
+        "ITO": {"aqi_offset": 35, "pop": 2.1, "schools": 8},
         "Punjabi Bagh": {"aqi_offset": 25, "pop": 2.8, "schools": 15},
-        "Dwarka": {"aqi_offset": -15, "pop": 5.0, "schools": 32}, # Planned residential, lower base AQI
-        "Vasant Kunj": {"aqi_offset": -25, "pop": 1.5, "schools": 14}, # Greener, less dense
-        "Cyber City": {"aqi_offset": 20, "pop": 1.2, "schools": 5}, # Commercial hub Gurugram
-        "Sector 62": {"aqi_offset": 15, "pop": 2.5, "schools": 22}, # Noida IT hub
+        "Dwarka": {"aqi_offset": -15, "pop": 5.0, "schools": 32},
+        "Vasant Kunj": {"aqi_offset": -25, "pop": 1.5, "schools": 14},
+        "Cyber City": {"aqi_offset": 20, "pop": 1.2, "schools": 5},
+        "Sector 62": {"aqi_offset": 15, "pop": 2.5, "schools": 22},
     }
     
-    # Default fallback for zones not explicitly listed above
-    default_intel = {"aqi_offset": 0, "pop": 2.0, "schools": 10}
-    
-    # Location Database
     loc_data = {
         "Delhi": ["Anand Vihar", "ITO", "Rohini", "Dwarka", "Pitampura", "Okhla Phase-2", "Kashmere Gate", "India Gate", "Vasant Kunj", "RK Puram", "Punjabi Bagh", "Najafgarh", "Siri Fort", "Bawana", "Narela", "Ashok Vihar", "Jahangirpuri", "Patparganj", "Sonia Vihar", "Mandir Marg"],
         "Noida": ["Sector 62", "Sector 125", "Sector 1", "Sector 116", "Knowledge Park III", "Knowledge Park V"],
@@ -190,11 +182,17 @@ if selected_tab == "DASHBOARD":
     with c_loc1:
         selected_city = st.selectbox("City", list(loc_data.keys()))
     with c_loc2:
-        # Capped at exactly 30 regions using slicing [:30]
         selected_zone = st.selectbox("Region/Zone", loc_data[selected_city][:30])
         
-    # Look up the selected zone's data (checking if the name matches any key)
-    current_intel = default_intel
+    # --- THE FIX: DYNAMIC FALLBACK ---
+    # If the place is not hardcoded, use math to give it unique but consistent stats
+    dyn_offset = (len(selected_zone) * 12 + ord(selected_zone[0])) % 80 - 40
+    dyn_pop = round((len(selected_zone) % 6) + 1.2, 1)
+    dyn_schools = (len(selected_zone) * 3) % 25 + 5
+    
+    current_intel = {"aqi_offset": dyn_offset, "pop": dyn_pop, "schools": dyn_schools}
+    
+    # Overwrite dynamic stats if the place IS in our hardcoded dictionary
     for key in region_intel:
         if key in selected_zone:
             current_intel = region_intel[key]
@@ -217,10 +215,7 @@ if selected_tab == "DASHBOARD":
         now = datetime.datetime.now()
         if model:
             try:
-                # 1. Base AI Prediction
                 pred = model.predict([[now.hour, now.month, now.weekday(), 18, 55, 6.0, 1.5]])[0]
-                
-                # 2. Add the realistic Zone Offset
                 live_aqi = int(pred) + current_intel["aqi_offset"]
             except:
                 live_aqi = 345 
@@ -238,7 +233,6 @@ if selected_tab == "DASHBOARD":
         with k2:
             st.markdown(f'<div class="glass-card" style="border-left: 4px solid {color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{status}</p></div>', unsafe_allow_html=True)
         with k3:
-            # Accurate Economy Loss based on real population
             eco_loss = round((live_aqi * 0.005) * current_intel["pop"], 2)
             st.markdown(f'<div class="glass-card" style="border-left: 4px solid #00d4ff"><h3>ECONOMY LOSS</h3><p class="metric-value" style="color:#00d4ff">₹{eco_loss} Cr</p><p class="sub-metric">Daily Estimate</p></div>', unsafe_allow_html=True)
 
@@ -265,8 +259,8 @@ if selected_tab == "DASHBOARD":
         trend_vals = []
         for h in hours:
             base = live_aqi - 50
-            if 8 <= h <= 10: base += 80  # Morning Peak
-            elif 17 <= h <= 19: base += 100 # Evening Peak
+            if 8 <= h <= 10: base += 80 
+            elif 17 <= h <= 19: base += 100 
             trend_vals.append(base + np.random.randint(-10, 10))
             
         fig_trend = px.area(x=hours, y=trend_vals, labels={'x':'Hour', 'y':'AQI'})
@@ -376,19 +370,14 @@ elif selected_tab == "HISTORY":
         
     dates = pd.date_range(end=datetime.date.today(), periods=days).tolist()
     
-    # Generate data (lowered the range slightly so "green" points happen naturally)
     hist_aqi = np.random.randint(150, 480, size=days)
-    
-    # Set default colors
     marker_colors = ['#ff0000' if x > 400 else '#ffaa00' if x > 250 else '#00ff9d' for x in hist_aqi]
     
-    # THE FIX: Force the lowest two points to ALWAYS be green 
     if days >= 2:
         lowest_two_indices = np.argsort(hist_aqi)[:2]
         for idx in lowest_two_indices:
             marker_colors[idx] = '#00ff9d'
     
-    # 1. LINE GRAPH with COLOR CODED MARKERS
     st.markdown("### 📈 AQI Trend (Peak Analysis)")
     
     fig_hist = go.Figure()
@@ -402,7 +391,6 @@ elif selected_tab == "HISTORY":
     fig_hist.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="white")
     st.plotly_chart(fig_hist, use_container_width=True)
 
-    # 2. SMOG BREAKDOWN
     st.markdown("### 🌫️ Smog Composition Analysis")
     
     fog = np.random.randint(10, 40, size=days)
@@ -424,15 +412,13 @@ elif selected_tab == "PROTOCOLS":
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader("⚠️ Recovery Strategy Simulator")
     
-    # Base Situation
-    base_aqi = 465 # Example: Severe +
+    base_aqi = 465
     
-    # Logic: 450+ is RED and GRAP 4
     if base_aqi >= 450:
-        curr_color = "#ff0000" # RED
+        curr_color = "#ff0000"
         curr_stage = "GRAP STAGE IV (SEVERE+)"
     elif base_aqi >= 400:
-        curr_color = "#7E0023" # Maroon/Dark
+        curr_color = "#7E0023"
         curr_stage = "GRAP STAGE III (SEVERE)"
     else:
         curr_color = "#ffaa00"
@@ -441,10 +427,8 @@ elif selected_tab == "PROTOCOLS":
     st.markdown(f"**Current Status:** <span style='color:{curr_color}; font-size:1.5rem; font-weight:bold'>{base_aqi} | {curr_stage}</span>", unsafe_allow_html=True)
     st.markdown("---")
 
-    # AUTOMATED RECOVERY CHAIN
     col1, col2, col3 = st.columns(3)
     
-    # STEP 1: GRAP 4 IMPLEMENTATION
     with col1:
         st.markdown("#### 1️⃣ IMMEDIATE ACTION")
         st.error("🚨 IMPLEMENT GRAP-IV")
@@ -453,12 +437,9 @@ elif selected_tab == "PROTOCOLS":
         - Ban Heavy Vehicles
         - Closure of Schools
         """)
-        
-        # Predicted Drop for GRAP 4 (~18%)
         p1_aqi = int(base_aqi * 0.82)
         st.metric("Projected AQI", p1_aqi, delta=f"{p1_aqi - base_aqi}", delta_color="inverse")
     
-    # STEP 2: GRAP 3 TRANSITION
     with col2:
         st.markdown("#### 2️⃣ SECONDARY PHASE")
         st.warning("🟠 SHIFT TO GRAP-III")
@@ -467,12 +448,9 @@ elif selected_tab == "PROTOCOLS":
         - Daily Road Sweeping
         - Off-Peak Metro
         """)
-        
-        # Predicted Drop for GRAP 3 (~12% from P1)
         p2_aqi = int(p1_aqi * 0.88)
         st.metric("Projected AQI", p2_aqi, delta=f"{p2_aqi - p1_aqi}", delta_color="inverse")
 
-    # STEP 3: STABILIZATION
     with col3:
         st.markdown("#### 3️⃣ STABILIZATION")
         st.success("🟢 MAINTAIN GRAP-II")
@@ -481,8 +459,6 @@ elif selected_tab == "PROTOCOLS":
         - Power Backup Ban
         - Traffic Management
         """)
-        
-        # Predicted Drop (~8% from P2)
         p3_aqi = int(p2_aqi * 0.92)
         st.metric("Target AQI", p3_aqi, delta=f"{p3_aqi - p2_aqi}", delta_color="inverse")
 
