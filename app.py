@@ -67,7 +67,7 @@ model = load_model()
 
 # --- 3. HEADER & NAVIGATION ---
 c_logo, c_nav = st.columns([1, 4])
-with c_logo: st.title("AIRSCRIBE"); st.caption("NEXUS v13.0 (Data Integrated)")
+with c_logo: st.title("AIRSCRIBE"); st.caption("NEXUS v13.1 (Color Graded)")
 with c_nav: selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -130,10 +130,12 @@ if model:
     except: global_live_aqi = 345 
 else: global_live_aqi = 345 
 
-if global_live_aqi > 400: global_status, global_color = "SEVERE", "#7E0023"
-elif global_live_aqi > 300: global_status, global_color = "VERY POOR", "#ff0000"
-elif global_live_aqi > 200: global_status, global_color = "POOR", "#ffaa00"
-else: global_status, global_color = "MODERATE", "#00ff9d"
+# --- FIXED CPCB COLOR GRADING ---
+if global_live_aqi > 400: global_status, global_color = "SEVERE", "#7E0023" # Dark Red
+elif global_live_aqi > 300: global_status, global_color = "VERY POOR", "#ff0000" # Red
+elif global_live_aqi > 200: global_status, global_color = "POOR", "#ffaa00" # Orange
+elif global_live_aqi > 100: global_status, global_color = "MODERATE", "#ffff00" # Yellow
+else: global_status, global_color = "SATISFACTORY", "#00ff9d" # Green
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -207,7 +209,7 @@ elif selected_tab == "FORECAST":
     """, unsafe_allow_html=True)
     
     st.caption("*(Note: The scattered dots below represent hundreds of possible simulated weather scenarios. Your specific prediction is mapped within this cloud).*")
-    df_3d = pd.DataFrame({'Wind': np.random.uniform(0, 20, 100), 'Temp': np.random.uniform(5, 40, 100), 'AQI': np.random.randint(100, 500, 100)})
+    df_3d = pd.DataFrame({'Wind': np.random.uniform(0, 20, 100), 'Temp': np.random.uniform(5, 40, 100), 'AQI': np.random.randint(50, 500, 100)})
     df_3d.loc[0] = [curr_w, curr_t, global_live_aqi]
     fig_3d = px.scatter_3d(df_3d, x='Wind', y='Temp', z='AQI', color='AQI', size_max=15, opacity=0.7, color_continuous_scale='Turbo')
     fig_3d.update_layout(scene=dict(xaxis_title='Wind', yaxis_title='Temp', zaxis_title='AQI'), height=500, paper_bgcolor="rgba(0,0,0,0)")
@@ -255,7 +257,6 @@ elif selected_tab == "HISTORY":
     days = st.number_input("Days to Analyze Backwards", min_value=1, max_value=30, value=7)
     dates = pd.date_range(end=global_date, periods=days).tolist()
     
-    # FETCH REAL CSV DATA
     hist_aqi = []
     daily_csv = {}
     if df_csv is not None:
@@ -268,12 +269,12 @@ elif selected_tab == "HISTORY":
             val = daily_csv[date_obj] + current_intel["aqi_offset"]
             hist_aqi.append(max(50, int(val)))
         else:
-            # Safe Fallback if CSV data is missing for this date (e.g. 2026 dates)
             np.random.seed(int(d.strftime("%Y%m%d")) + sum([ord(c) for c in selected_zone]))
             val = 200 + current_intel["aqi_offset"] + np.random.randint(-40, 80)
             hist_aqi.append(max(50, val))
             
-    marker_colors = ['#7E0023' if x > 400 else '#ff0000' if x > 300 else '#ffaa00' if x > 200 else '#00ff9d' for x in hist_aqi]
+    # FIXED HISTORY GRAPH COLOR GRADING
+    marker_colors = ['#7E0023' if x > 400 else '#ff0000' if x > 300 else '#ffaa00' if x > 200 else '#ffff00' if x > 100 else '#00ff9d' for x in hist_aqi]
     avg_aqi = int(np.mean(hist_aqi))
     
     st.markdown("### 📈 AQI Trend (Ground Truth Data)")
@@ -305,6 +306,8 @@ elif selected_tab == "PROTOCOLS":
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader(f"⚠️ Recovery Strategy Simulator: {selected_zone}")
     
+    base_aqi = global_live_aqi
+    
     st.markdown(f"**Current Baseline AQI:** <span style='color:{global_color}; font-size:1.5rem; font-weight:bold'>{global_live_aqi}</span>", unsafe_allow_html=True)
     st.markdown("---")
 
@@ -319,8 +322,8 @@ elif selected_tab == "PROTOCOLS":
         if imm_color == "error": st.error(imm_text)
         else: st.warning(imm_text)
         st.markdown("- Stop Construction\n- Ban Heavy Vehicles\n- Closure of Schools")
-        p1_aqi = int(global_live_aqi * 0.82)
-        st.metric("Projected AQI", p1_aqi, delta=f"{p1_aqi - global_live_aqi}", delta_color="inverse")
+        p1_aqi = int(base_aqi * 0.82)
+        st.metric("Projected AQI", p1_aqi, delta=f"{p1_aqi - base_aqi}", delta_color="inverse")
     
     with col2:
         st.markdown("#### 2️⃣ SECONDARY PHASE")
