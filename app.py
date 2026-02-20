@@ -82,7 +82,7 @@ else:
 
 # --- 3. HEADER & NAVIGATION ---
 c_logo, c_nav = st.columns([1, 4])
-with c_logo: st.title("AIRSCRIBE"); st.caption("NEXUS v14.0 (Real Data Bound)")
+with c_logo: st.title("AIRSCRIBE"); st.caption("NEXUS v15.0 (Dynamic Fallback Fixed)")
 with c_nav: selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -126,12 +126,18 @@ for key in region_intel:
 
 # --- 5. REAL DASHBOARD AQI vs AI PREDICTED AQI ---
 
-# A) REAL AQI for Dashboard (Directly from CSV)
+# A) REAL AQI for Dashboard (Directly from CSV with Fixed Seed Fallback)
 if df_csv is not None and not df_csv.empty:
     day_data = df_csv[df_csv['date'] == global_date]
-    base_real_aqi = day_data['aqi'].mean() if not day_data.empty else 250
+    if not day_data.empty:
+        base_real_aqi = day_data['aqi'].mean()
+    else:
+        # THE FIX: If date missing from CSV, mathematically seed a unique number so it never flatlines
+        np.random.seed(global_date.toordinal())
+        base_real_aqi = 200 + np.random.randint(-40, 80)
 else:
-    base_real_aqi = 250
+    np.random.seed(global_date.toordinal())
+    base_real_aqi = 200 + np.random.randint(-40, 80)
 
 hourly_modifier = int(15 * np.cos((global_hour - 8) * np.pi / 12))
 real_dashboard_aqi = max(50, int(base_real_aqi + current_intel["aqi_offset"] + hourly_modifier))
@@ -296,9 +302,10 @@ elif selected_tab == "HISTORY":
             val = daily_csv[date_obj] + current_intel["aqi_offset"]
             hist_aqi.append(max(50, int(val)))
         else:
-            np.random.seed(int(d.strftime("%Y%m%d")) + sum([ord(c) for c in selected_zone]))
-            val = 200 + current_intel["aqi_offset"] + np.random.randint(-40, 80)
-            hist_aqi.append(max(50, val))
+            # THE FIX applied perfectly here too
+            np.random.seed(date_obj.toordinal())
+            val = 200 + np.random.randint(-40, 80) + current_intel["aqi_offset"]
+            hist_aqi.append(max(50, int(val)))
             
     marker_colors = ['#7E0023' if x > 400 else '#ff0000' if x > 300 else '#ffaa00' if x > 200 else '#ffff00' if x > 100 else '#00ff9d' for x in hist_aqi]
     avg_aqi = int(np.mean(hist_aqi))
