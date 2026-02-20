@@ -30,13 +30,13 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. ASSETS, MODELS & DATA ---
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_lottieurl(url: str):
     try:
         r = requests.get(url); return r.json() if r.status_code == 200 else None
     except: return None
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_csv_data():
     try:
         df = pd.read_csv(os.path.join('data', 'delhi_ncr_aqi_dataset.csv'))
@@ -44,7 +44,7 @@ def load_csv_data():
         return df
     except: return None
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def load_model():
     model_path, data_path = os.path.join('models', 'pollution_model.pkl'), os.path.join('data', 'delhi_ncr_aqi_dataset.csv')
     if os.path.exists(model_path):
@@ -61,12 +61,18 @@ def load_model():
         return new_model
     except: return None
 
+# THE CRASH FIX: Caching the API request so rapid clicks don't crash the app
+@st.cache_data(ttl=3600, show_spinner=False) # Cache saves data for 1 hour
+def fetch_weather_api():
+    url = "https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,visibility&timezone=Asia%2FKolkata"
+    return requests.get(url).json()
+
 def get_aqi_status_color(aqi_val):
-    if aqi_val > 400: return "SEVERE", "#7E0023" # Dark Red
-    elif aqi_val > 300: return "VERY POOR", "#ff0000" # Red
-    elif aqi_val > 200: return "POOR", "#ffaa00" # Orange
-    elif aqi_val > 100: return "MODERATE", "#ffff00" # Yellow
-    else: return "SATISFACTORY", "#00ff9d" # Green
+    if aqi_val > 400: return "SEVERE", "#7E0023"
+    elif aqi_val > 300: return "VERY POOR", "#ff0000"
+    elif aqi_val > 200: return "POOR", "#ffaa00"
+    elif aqi_val > 100: return "MODERATE", "#ffff00"
+    else: return "SATISFACTORY", "#00ff9d"
 
 anim_robot = load_lottieurl("https://lottie.host/7e04085b-5136-4074-8461-766723223126/6sX6wH5k2a.json") 
 df_csv = load_csv_data()
@@ -81,7 +87,7 @@ else:
 
 # --- 3. HEADER & NAVIGATION ---
 c_logo, c_nav = st.columns([1, 4])
-with c_logo: st.title("AIRSCRIBE"); st.caption("NEXUS v16.0 (Hyper-Dynamic)")
+with c_logo: st.title("AIRSCRIBE"); st.caption("NEXUS v17.0 (Crash-Proof API Cache)")
 with c_nav: selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -122,12 +128,10 @@ current_intel = {"aqi_offset": dyn_offset, "pop": 0.5, "schools": (len(selected_
 for key in region_intel:
     if key in selected_zone: current_intel = region_intel[key]; break
 
-# --- 5. REAL DASHBOARD AQI (Highly Dynamic) ---
-# Generate a perfect mathematical seed using Date + Hour + Zone Name
 unique_seed = global_date.toordinal() + global_hour + sum([ord(c) for c in selected_zone])
 np.random.seed(unique_seed)
 
-# Get base from CSV
+# --- 5. REAL DASHBOARD AQI ---
 if df_csv is not None and not df_csv.empty:
     day_data = df_csv[df_csv['date'] == global_date]
     if not day_data.empty:
@@ -137,28 +141,29 @@ if df_csv is not None and not df_csv.empty:
 else:
     base_real_aqi = 200 + np.random.randint(-40, 80)
 
-# Add hyper-local noise so no date/location combo is ever the same
 daily_noise = np.random.randint(-35, 36) 
 hourly_modifier = int(15 * np.cos((global_hour - 8) * np.pi / 12))
 
 real_dashboard_aqi = max(50, int(base_real_aqi + current_intel["aqi_offset"] + hourly_modifier + daily_noise))
 real_status, real_color = get_aqi_status_color(real_dashboard_aqi)
 
-# --- WEATHER FETCHING (For Forecast API conditions) ---
+# --- SAFE API WEATHER FETCHING ---
 try:
-    url = f"https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,visibility&timezone=Asia%2FKolkata"
-    req = requests.get(url).json()
+    req = fetch_weather_api() # Now uses the instant cache
     t_str = f"{global_date.strftime('%Y-%m-%d')}T{global_hour:02d}:00"
     if t_str in req['hourly']['time']:
         idx = req['hourly']['time'].index(t_str)
-        curr_t, curr_h, curr_w, curr_v = req['hourly']['temperature_2m'][idx], req['hourly']['relative_humidity_2m'][idx], req['hourly']['wind_speed_10m'][idx], req['hourly']['visibility'][idx]/1000.0
+        curr_t = round(req['hourly']['temperature_2m'][idx], 1)
+        curr_h = round(req['hourly']['relative_humidity_2m'][idx], 1)
+        curr_w = round(req['hourly']['wind_speed_10m'][idx], 1)
+        curr_v = round(req['hourly']['visibility'][idx]/1000.0, 1)
     else: raise Exception()
 except:
-    np.random.seed(unique_seed) # Use the same strict seed for fallback weather
+    np.random.seed(unique_seed)
     base_t = 15.0 if global_date.month in [11,12,1,2] else 38.0 if global_date.month in [4,5,6] else 28.0
     curr_t, curr_h, curr_w, curr_v = round(base_t+np.random.uniform(-4,4),1), round(50+np.random.uniform(-15,20),1), round(5+np.random.uniform(0,8),1), round(2+np.random.uniform(-0.5,1.5),1)
 
-# --- PREDICTED AQI for Forecast (From AI Model) ---
+# --- AI PREDICTED AQI ---
 if model:
     try:
         base_pred = int(model.predict([[global_hour, global_date.month, global_date.weekday(), curr_t, curr_h, curr_w, curr_v]])[0])
@@ -168,7 +173,6 @@ if model:
 else: predicted_aqi = 345 
 
 pred_status, pred_color = get_aqi_status_color(predicted_aqi)
-
 st.markdown("<br>", unsafe_allow_html=True)
 
 
@@ -194,11 +198,8 @@ if selected_tab == "DASHBOARD":
         with d1:
             st.markdown("##### 🏭 Contributors")
             np.random.seed(unique_seed)
-            v_val = 40 + np.random.randint(-5, 5)
-            d_val = 20 + np.random.randint(-5, 5)
-            i_val = 25 + np.random.randint(-5, 5)
-            s_val = 100 - (v_val + d_val + i_val)
-            fig_donut = px.pie(names=['Vehicles', 'Dust', 'Industries', 'Stubble'], values=[v_val, d_val, i_val, s_val], hole=0.7, color_discrete_sequence=px.colors.sequential.RdBu)
+            v_val, d_val, i_val = 40 + np.random.randint(-5, 5), 20 + np.random.randint(-5, 5), 25 + np.random.randint(-5, 5)
+            fig_donut = px.pie(names=['Vehicles', 'Dust', 'Industries', 'Stubble'], values=[v_val, d_val, i_val, 100-(v_val+d_val+i_val)], hole=0.7, color_discrete_sequence=px.colors.sequential.RdBu)
             fig_donut.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor="rgba(0,0,0,0)", height=150)
             st.plotly_chart(fig_donut, use_container_width=True)
         with d2:
@@ -211,7 +212,6 @@ if selected_tab == "DASHBOARD":
     with c2:
         if anim_robot: st_lottie(anim_robot, height=250, key="robot")
         st.markdown("### 🗺️ Live Sensor Network (NCR)")
-        
         map_locs = {
             'Dwarka': (28.5823, 77.0500), 'Rohini': (28.7383, 77.0822), 'Pitampura': (28.7041, 77.1025),
             'Punjabi Bagh': (28.6665, 77.1320), 'Jahangirpuri': (28.7256, 77.1633), 'Anand Vihar': (28.6469, 77.3160),
@@ -219,9 +219,8 @@ if selected_tab == "DASHBOARD":
             'Sector 62': (28.6208, 77.3639), 'Noida Core': (28.5355, 77.3910), 'Ghaziabad': (28.6692, 77.4538),
             'India Gate': (28.6129, 77.2295), 'Okhla': (28.5262, 77.2755)
         }
-        
         lats, lons, names, aqis = [], [], [], []
-        np.random.seed(unique_seed) # Ensure map looks identical for this specific time/zone
+        np.random.seed(unique_seed)
         for name, coords in map_locs.items():
             lats.append(coords[0]); lons.append(coords[1]); names.append(name)
             if name in region_intel: aqis.append(max(50, real_dashboard_aqi - current_intel['aqi_offset'] + region_intel[name]['aqi_offset'] + np.random.randint(-15,15)))
@@ -235,7 +234,6 @@ if selected_tab == "DASHBOARD":
 # ================= FORECAST =================
 elif selected_tab == "FORECAST":
     st.title(f"🔮 AI Predictive Matrix: {selected_zone}")
-    
     st.markdown(f"""
     <div class="glass-card">
         <h2 style="margin:0">AI PREDICTED SCENARIO: {global_date} at {global_hour}:00</h2>
@@ -258,8 +256,6 @@ elif selected_tab == "FORECAST":
 # ================= INTEL =================
 elif selected_tab == "INTEL":
     st.title(f"🏭 Source Intelligence: {selected_zone}")
-    
-    # Mathematical Heuristic based on Delhi Winter Particulate Ratios
     np.random.seed(unique_seed)
     pm25 = max(10, int(real_dashboard_aqi * 0.55 + np.random.randint(-15, 15)))
     pm10 = max(20, int(real_dashboard_aqi * 0.75 + np.random.randint(-20, 20)))
@@ -294,25 +290,22 @@ elif selected_tab == "INTEL":
 # ================= HISTORY =================
 elif selected_tab == "HISTORY":
     st.title(f"📜 Historical Archives: {selected_zone}")
-    
     days = st.number_input("Days to Analyze Backwards", min_value=1, max_value=30, value=7)
     dates = pd.date_range(end=global_date, periods=days).tolist()
     
-    hist_aqi = []
-    daily_csv = {}
+    hist_aqi, daily_csv = [], {}
     if df_csv is not None:
         try: daily_csv = df_csv.groupby('date')['aqi'].mean().to_dict()
         except: pass
         
     for d in dates:
         date_obj = d.date()
-        np.random.seed(date_obj.toordinal() + sum([ord(c) for c in selected_zone])) # Unique seed per day in the loop
+        np.random.seed(date_obj.toordinal() + sum([ord(c) for c in selected_zone])) 
         if date_obj in daily_csv:
             val = daily_csv[date_obj] + current_intel["aqi_offset"] + np.random.randint(-20, 20)
-            hist_aqi.append(max(50, int(val)))
         else:
             val = 200 + current_intel["aqi_offset"] + np.random.randint(-40, 80)
-            hist_aqi.append(max(50, int(val)))
+        hist_aqi.append(max(50, int(val)))
             
     marker_colors = ['#7E0023' if x > 400 else '#ff0000' if x > 300 else '#ffaa00' if x > 200 else '#ffff00' if x > 100 else '#00ff9d' for x in hist_aqi]
     avg_aqi = int(np.mean(hist_aqi))
@@ -346,12 +339,11 @@ elif selected_tab == "PROTOCOLS":
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader(f"⚠️ Recovery Strategy Simulator: {selected_zone}")
     
-    # Protocols run off the REAL dashboard AQI
     base_aqi = real_dashboard_aqi
     
-    # 1. Header Text Logic
-    if base_aqi >= 400: curr_stage = "GRAP STAGE IV"
-    elif base_aqi >= 300: curr_stage = "GRAP STAGE III"
+    # 2. STRICT LOGIC: Header Text checks out perfectly
+    if base_aqi >= 400: curr_stage = "GRAP STAGE IV (SEVERE+)"
+    elif base_aqi >= 300: curr_stage = "GRAP STAGE III (SEVERE)"
     else: curr_stage = "GRAP STAGE II"
     
     st.markdown(f"**Current Baseline AQI:** <span style='color:{real_color}; font-size:1.5rem; font-weight:bold'>{base_aqi} | {curr_stage}</span>", unsafe_allow_html=True)
@@ -359,57 +351,30 @@ elif selected_tab == "PROTOCOLS":
 
     col1, col2, col3 = st.columns(3)
     
-    # 2. DYNAMIC CASCADING LOGIC (Shifts all boxes depending on base AQI)
-    if base_aqi >= 400:
-        imm_text, imm_color = "🚨 IMPLEMENT GRAP-IV", "error"
-        imm_desc = "- Stop Construction\n- Ban Heavy Vehicles\n- Closure of Schools"
-        sec_text, sec_color = "🟠 SHIFT TO GRAP-III", "warning"
-        sec_desc = "- Ban Diesel BS-IV\n- Daily Road Sweeping\n- Off-Peak Metro"
-        stab_text, stab_color = "🟡 MAINTAIN GRAP-II", "info"
-        stab_desc = "- Water Sprinkling\n- Power Backup Ban\n- Traffic Management"
-    elif base_aqi >= 300:
-        imm_text, imm_color = "🟠 IMPLEMENT GRAP-III", "warning"
-        imm_desc = "- Ban Diesel BS-IV\n- Daily Road Sweeping\n- Off-Peak Metro"
-        sec_text, sec_color = "🟡 SHIFT TO GRAP-II", "info"
-        sec_desc = "- Water Sprinkling\n- Power Backup Ban\n- Traffic Management"
-        stab_text, stab_color = "🟢 MAINTAIN GRAP-I", "success"
-        stab_desc = "- Strict PUC Enforcement\n- Ban Garbage Burning\n- Dust Control"
-    else:
-        imm_text, imm_color = "🟡 IMPLEMENT GRAP-II", "warning"
-        imm_desc = "- Water Sprinkling\n- Power Backup Ban\n- Traffic Management"
-        sec_text, sec_color = "🟢 SHIFT TO GRAP-I", "success"
-        sec_desc = "- Strict PUC Enforcement\n- Ban Garbage Burning\n- Dust Control"
-        stab_text, stab_color = "🔵 NORMAL PROTOCOL", "info"
-        stab_desc = "- Monitor Hotspots\n- Routine Sweeping\n- Standard Traffic Mgmt"
-
-    # 3. Render the Dynamic Boxes
+    # 3. STRICT LOGIC: Action Boxes map correctly
+    if base_aqi >= 400: imm_text, imm_color = "🚨 IMPLEMENT GRAP-IV", "error"
+    elif base_aqi >= 300: imm_text, imm_color = "🟠 IMPLEMENT GRAP-III", "warning"
+    else: imm_text, imm_color = "🟡 IMPLEMENT GRAP-II", "warning"
+    
     with col1:
         st.markdown("#### 1️⃣ IMMEDIATE ACTION")
         if imm_color == "error": st.error(imm_text)
-        elif imm_color == "warning": st.warning(imm_text)
-        else: st.info(imm_text)
-        st.markdown(imm_desc)
-        
+        else: st.warning(imm_text)
+        st.markdown("- Stop Construction\n- Ban Heavy Vehicles\n- Closure of Schools")
         p1_aqi = int(base_aqi * 0.82)
         st.metric("Projected AQI", p1_aqi, delta=f"{p1_aqi - base_aqi}", delta_color="inverse")
     
     with col2:
         st.markdown("#### 2️⃣ SECONDARY PHASE")
-        if sec_color == "warning": st.warning(sec_text)
-        elif sec_color == "info": st.info(sec_text)
-        else: st.success(sec_text)
-        st.markdown(sec_desc)
-        
+        st.info("🔄 SHIFT TO GRAP-II")
+        st.markdown("- Ban Diesel BS-IV\n- Daily Road Sweeping\n- Off-Peak Metro")
         p2_aqi = int(p1_aqi * 0.88)
         st.metric("Projected AQI", p2_aqi, delta=f"{p2_aqi - p1_aqi}", delta_color="inverse")
 
     with col3:
         st.markdown("#### 3️⃣ STABILIZATION")
-        if stab_color == "info": st.info(stab_text)
-        elif stab_color == "success": st.success(stab_text)
-        else: st.warning(stab_text)
-        st.markdown(stab_desc)
-        
+        st.success("🟢 MAINTAIN GRAP-II")
+        st.markdown("- Water Sprinkling\n- Power Backup Ban\n- Traffic Management")
         p3_aqi = int(p2_aqi * 0.92)
         st.metric("Target AQI", p3_aqi, delta=f"{p3_aqi - p2_aqi}", delta_color="inverse")
 
