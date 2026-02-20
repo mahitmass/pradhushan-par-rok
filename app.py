@@ -186,10 +186,43 @@ if selected_tab == "DASHBOARD":
         with k1: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {real_color}"><h3>REAL AQI</h3><p class="metric-value" style="color:{real_color}">{real_dashboard_aqi}</p></div>', unsafe_allow_html=True)
         with k2: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {real_color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{real_status}</p></div>', unsafe_allow_html=True)
         with k3:
-            crisis_multiplier = 2.5 if real_dashboard_aqi >= 450 else 1.5 if real_dashboard_aqi >= 400 else 1.0
-            eco_loss = round((real_dashboard_aqi * 0.005) * current_intel["pop"] * crisis_multiplier, 2)
-            st.markdown(f'<div class="glass-card" style="border-left: 4px solid #00d4ff"><h3>ECON. LOSS</h3><p class="metric-value" style="color:#00d4ff">₹{eco_loss} Cr</p><p class="sub-metric">Est. Damage</p></div>', unsafe_allow_html=True)
+    # --- PRODUCTIVITY-BASED ECONOMIC LOSS MODEL ---
 
+    # 1️⃣ Assume 45% working population
+    working_population_lakhs = current_intel["pop"] * 0.45
+
+    # 2️⃣ Convert lakhs to actual number of people
+    working_population = working_population_lakhs * 100000
+
+    # 3️⃣ Average daily income per person (₹)
+    daily_income = 500  # Conservative national average
+
+    # 4️⃣ AQI-based productivity loss percentage
+    if real_dashboard_aqi < 200:
+        loss_pct = 0.02
+    elif real_dashboard_aqi < 300:
+        loss_pct = 0.05
+    elif real_dashboard_aqi < 400:
+        loss_pct = 0.08
+    elif real_dashboard_aqi < 450:
+        loss_pct = 0.12
+    else:
+        loss_pct = 0.18
+
+    # 5️⃣ Calculate economic loss (₹)
+    eco_loss_rupees = working_population * daily_income * loss_pct
+
+    # 6️⃣ Convert to Crores
+    eco_loss = round(eco_loss_rupees / 10000000, 2)
+
+    st.markdown(
+        f'<div class="glass-card" style="border-left: 4px solid #00d4ff">'
+        f'<h3>ECON. LOSS</h3>'
+        f'<p class="metric-value" style="color:#00d4ff">₹{eco_loss} Cr</p>'
+        f'<p class="sub-metric">Daily Productivity Impact</p>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
         d1, d2 = st.columns([1, 2])
         with d1:
             st.markdown("##### 🏭 Contributors")
