@@ -186,9 +186,10 @@ if selected_tab == "DASHBOARD":
         with k1: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {real_color}"><h3>REAL AQI</h3><p class="metric-value" style="color:{real_color}">{real_dashboard_aqi}</p></div>', unsafe_allow_html=True)
         with k2: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {real_color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{real_status}</p></div>', unsafe_allow_html=True)
         with k3:
-    crisis_multiplier = 2.5 if real_dashboard_aqi >= 450 else 1.5 if real_dashboard_aqi >= 400 else 1.0
-    eco_loss = round((real_dashboard_aqi * 0.005) * current_intel["pop"] * crisis_multiplier, 2)
-    st.markdown(f'<div class="glass-card" style="border-left: 4px solid #00d4ff"><h3>ECON. LOSS</h3><p class="metric-value" style="color:#00d4ff">₹{eco_loss} Cr</p><p class="sub-metric">Est. Damage</p></div>', unsafe_allow_html=True)
+            crisis_multiplier = 2.5 if real_dashboard_aqi >= 450 else 1.5 if real_dashboard_aqi >= 400 else 1.0
+            eco_loss = round((real_dashboard_aqi * 0.005) * current_intel["pop"] * crisis_multiplier, 2)
+            st.markdown(f'<div class="glass-card" style="border-left: 4px solid #00d4ff"><h3>ECON. LOSS</h3><p class="metric-value" style="color:#00d4ff">₹{eco_loss} Cr</p><p class="sub-metric">Est. Damage</p></div>', unsafe_allow_html=True)
+
         d1, d2 = st.columns([1, 2])
         with d1:
             st.markdown("##### 🏭 Contributors")
