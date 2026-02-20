@@ -346,13 +346,23 @@ elif selected_tab == "PROTOCOLS":
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader(f"⚠️ Recovery Strategy Simulator: {selected_zone}")
     
+    # 1. Grab the exact Real AQI from the Dashboard
     base_aqi = real_dashboard_aqi
     
-    st.markdown(f"**Current Baseline AQI:** <span style='color:{real_color}; font-size:1.5rem; font-weight:bold'>{base_aqi} | {real_status}</span>", unsafe_allow_html=True)
+    # 2. STRICT LOGIC: Header Text
+    if base_aqi >= 400: 
+        curr_stage = "GRAP STAGE IV"
+    elif base_aqi >= 300: 
+        curr_stage = "GRAP STAGE III"
+    else: 
+        curr_stage = "GRAP STAGE II"
+    
+    st.markdown(f"**Current Baseline AQI:** <span style='color:{real_color}; font-size:1.5rem; font-weight:bold'>{base_aqi} | {curr_stage}</span>", unsafe_allow_html=True)
     st.markdown("---")
 
     col1, col2, col3 = st.columns(3)
     
+    # 3. STRICT LOGIC: Action Boxes
     if base_aqi >= 400: imm_text, imm_color = "🚨 IMPLEMENT GRAP-IV", "error"
     elif base_aqi >= 300: imm_text, imm_color = "🟠 IMPLEMENT GRAP-III", "warning"
     else: imm_text, imm_color = "🟡 IMPLEMENT GRAP-II", "warning"
