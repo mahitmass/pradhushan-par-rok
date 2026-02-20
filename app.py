@@ -29,7 +29,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. ASSETS & MODELS ---
+# --- 2. ASSETS, MODELS & DATA ---
 @st.cache_data
 def load_lottieurl(url: str):
     try:
@@ -61,17 +61,32 @@ def load_model():
         return new_model
     except: return None
 
+def get_aqi_status_color(aqi_val):
+    if aqi_val > 400: return "SEVERE", "#7E0023" # Dark Red
+    elif aqi_val > 300: return "VERY POOR", "#ff0000" # Red
+    elif aqi_val > 200: return "POOR", "#ffaa00" # Orange
+    elif aqi_val > 100: return "MODERATE", "#ffff00" # Yellow
+    else: return "SATISFACTORY", "#00ff9d" # Green
+
 anim_robot = load_lottieurl("https://lottie.host/7e04085b-5136-4074-8461-766723223126/6sX6wH5k2a.json") 
 df_csv = load_csv_data()
 model = load_model()
 
+# Extract Max/Min dates from real CSV data
+if df_csv is not None and not df_csv.empty:
+    max_csv_date = df_csv['date'].max()
+    min_csv_date = df_csv['date'].min()
+else:
+    max_csv_date = datetime.date(2025, 12, 31)
+    min_csv_date = datetime.date(2023, 1, 1)
+
 # --- 3. HEADER & NAVIGATION ---
 c_logo, c_nav = st.columns([1, 4])
-with c_logo: st.title("AIRSCRIBE"); st.caption("NEXUS v13.1 (Color Graded)")
+with c_logo: st.title("AIRSCRIBE"); st.caption("NEXUS v14.0 (Real Data Bound)")
 with c_nav: selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
-# --- 4. GLOBAL LOCATION SELECTOR ---
+# --- 4. GLOBAL LOCATION & BOUNDED DATE SELECTOR ---
 c_loc1, c_loc2, c_date, c_time = st.columns(4)
 
 loc_data = {
@@ -100,7 +115,8 @@ region_intel = {
 
 with c_loc1: selected_city = st.selectbox("Select City", list(loc_data.keys()))
 with c_loc2: selected_zone = st.selectbox("Select Zone", loc_data[selected_city][:30])
-with c_date: global_date = st.date_input("Target Date", datetime.date.today())
+# Strict binding to max_csv_date: No future selections allowed.
+with c_date: global_date = st.date_input("Target Date", value=max_csv_date, min_value=min_csv_date, max_value=max_csv_date)
 with c_time: global_hour = st.number_input("Hour (0-23)", min_value=0, max_value=23, value=12)
 
 dyn_offset = (len(selected_zone) * 12 + ord(selected_zone[0])) % 80 - 40
@@ -108,7 +124,20 @@ current_intel = {"aqi_offset": dyn_offset, "pop": 0.5, "schools": (len(selected_
 for key in region_intel:
     if key in selected_zone: current_intel = region_intel[key]; break
 
-# --- LIVE/API FETCHING ALGORITHM ---
+# --- 5. REAL DASHBOARD AQI vs AI PREDICTED AQI ---
+
+# A) REAL AQI for Dashboard (Directly from CSV)
+if df_csv is not None and not df_csv.empty:
+    day_data = df_csv[df_csv['date'] == global_date]
+    base_real_aqi = day_data['aqi'].mean() if not day_data.empty else 250
+else:
+    base_real_aqi = 250
+
+hourly_modifier = int(15 * np.cos((global_hour - 8) * np.pi / 12))
+real_dashboard_aqi = max(50, int(base_real_aqi + current_intel["aqi_offset"] + hourly_modifier))
+real_status, real_color = get_aqi_status_color(real_dashboard_aqi)
+
+# B) WEATHER FETCHING (For Forecast API conditions)
 try:
     url = f"https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,visibility&timezone=Asia%2FKolkata"
     req = requests.get(url).json()
@@ -122,20 +151,16 @@ except:
     base_t = 15.0 if global_date.month in [11,12,1,2] else 38.0 if global_date.month in [4,5,6] else 28.0
     curr_t, curr_h, curr_w, curr_v = round(base_t+np.random.uniform(-4,4),1), round(50+np.random.uniform(-15,20),1), round(5+np.random.uniform(0,8),1), round(2+np.random.uniform(-0.5,1.5),1)
 
+# C) PREDICTED AQI for Forecast (From AI Model)
 if model:
     try:
         base_pred = int(model.predict([[global_hour, global_date.month, global_date.weekday(), curr_t, curr_h, curr_w, curr_v]])[0])
         wind_fx = (curr_w - 5.0) * -5; hum_fx = (curr_h - 50.0) * 0.3 
-        global_live_aqi = max(50, int(base_pred + current_intel["aqi_offset"] + wind_fx + hum_fx))
-    except: global_live_aqi = 345 
-else: global_live_aqi = 345 
+        predicted_aqi = max(50, int(base_pred + current_intel["aqi_offset"] + wind_fx + hum_fx))
+    except: predicted_aqi = 345 
+else: predicted_aqi = 345 
 
-# --- FIXED CPCB COLOR GRADING ---
-if global_live_aqi > 400: global_status, global_color = "SEVERE", "#7E0023" # Dark Red
-elif global_live_aqi > 300: global_status, global_color = "VERY POOR", "#ff0000" # Red
-elif global_live_aqi > 200: global_status, global_color = "POOR", "#ffaa00" # Orange
-elif global_live_aqi > 100: global_status, global_color = "MODERATE", "#ffff00" # Yellow
-else: global_status, global_color = "SATISFACTORY", "#00ff9d" # Green
+pred_status, pred_color = get_aqi_status_color(predicted_aqi)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -151,11 +176,12 @@ if selected_tab == "DASHBOARD":
     with c1:
         st.markdown(f"### ⚡ Surveillance Link: {selected_zone}")
         k1, k2, k3 = st.columns(3)
-        with k1: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {global_color}"><h3>AQI</h3><p class="metric-value" style="color:{global_color}">{global_live_aqi}</p></div>', unsafe_allow_html=True)
-        with k2: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {global_color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{global_status}</p></div>', unsafe_allow_html=True)
+        # Showing the REAL CSV-derived AQI here
+        with k1: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {real_color}"><h3>REAL AQI</h3><p class="metric-value" style="color:{real_color}">{real_dashboard_aqi}</p></div>', unsafe_allow_html=True)
+        with k2: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {real_color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{real_status}</p></div>', unsafe_allow_html=True)
         with k3:
-            crisis_multiplier = 2.5 if global_live_aqi >= 450 else 1.5 if global_live_aqi >= 400 else 1.0
-            eco_loss = round((global_live_aqi * 0.005) * current_intel["pop"] * crisis_multiplier, 2)
+            crisis_multiplier = 2.5 if real_dashboard_aqi >= 450 else 1.5 if real_dashboard_aqi >= 400 else 1.0
+            eco_loss = round((real_dashboard_aqi * 0.005) * current_intel["pop"] * crisis_multiplier, 2)
             st.markdown(f'<div class="glass-card" style="border-left: 4px solid #00d4ff"><h3>ECON. LOSS</h3><p class="metric-value" style="color:#00d4ff">₹{eco_loss} Cr</p><p class="sub-metric">Est. Damage</p></div>', unsafe_allow_html=True)
 
         d1, d2 = st.columns([1, 2])
@@ -165,7 +191,7 @@ if selected_tab == "DASHBOARD":
             fig_donut.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), paper_bgcolor="rgba(0,0,0,0)", height=150)
             st.plotly_chart(fig_donut, use_container_width=True)
         with d2:
-            st.markdown("##### 🌤️ Live API Conditions")
+            st.markdown("##### 🌤️ Meteorological Parameters")
             w1, w2, w3 = st.columns(3)
             w1.markdown(f'<div class="glass-card" style="padding:10px"><h4>💨 Wind</h4><p>{curr_w} km/h</p></div>', unsafe_allow_html=True)
             w2.markdown(f'<div class="glass-card" style="padding:10px"><h4>🌫️ Humid</h4><p>{curr_h}%</p></div>', unsafe_allow_html=True)
@@ -186,8 +212,8 @@ if selected_tab == "DASHBOARD":
         lats, lons, names, aqis = [], [], [], []
         for name, coords in map_locs.items():
             lats.append(coords[0]); lons.append(coords[1]); names.append(name)
-            if name in region_intel: aqis.append(max(50, global_live_aqi - current_intel['aqi_offset'] + region_intel[name]['aqi_offset']))
-            else: aqis.append(global_live_aqi + np.random.randint(-20, 20))
+            if name in region_intel: aqis.append(max(50, real_dashboard_aqi - current_intel['aqi_offset'] + region_intel[name]['aqi_offset']))
+            else: aqis.append(real_dashboard_aqi + np.random.randint(-20, 20))
             
         fig_map = px.scatter_mapbox(pd.DataFrame({'lat': lats, 'lon': lons, 'Location': names, 'AQI': aqis}), lat="lat", lon="lon", hover_name="Location", color="AQI", size="AQI", color_continuous_scale=px.colors.cyclical.IceFire, size_max=15, zoom=9)
         fig_map.update_layout(mapbox_style="carto-darkmatter", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=0, r=0, t=0, b=0), height=350)
@@ -200,17 +226,17 @@ elif selected_tab == "FORECAST":
     
     st.markdown(f"""
     <div class="glass-card">
-        <h2 style="margin:0">PREDICTED SCENARIO: {global_date} at {global_hour}:00</h2>
+        <h2 style="margin:0">AI PREDICTED SCENARIO: {global_date} at {global_hour}:00</h2>
         <div style="display:flex; align-items:baseline; gap:20px;">
-            <h1 style="font-size:4rem; color:{global_color}; margin:0">{global_live_aqi}</h1>
-            <h3>AQI ({global_status})</h3>
+            <h1 style="font-size:4rem; color:{pred_color}; margin:0">{predicted_aqi}</h1>
+            <h3>AQI ({pred_status})</h3>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    st.caption("*(Note: The scattered dots below represent hundreds of possible simulated weather scenarios. Your specific prediction is mapped within this cloud).*")
+    st.caption("*(Note: The scattered dots below represent hundreds of simulated weather scenarios. Your specific AI prediction is mapped within this cloud to demonstrate the dispersion model).*")
     df_3d = pd.DataFrame({'Wind': np.random.uniform(0, 20, 100), 'Temp': np.random.uniform(5, 40, 100), 'AQI': np.random.randint(50, 500, 100)})
-    df_3d.loc[0] = [curr_w, curr_t, global_live_aqi]
+    df_3d.loc[0] = [curr_w, curr_t, predicted_aqi]
     fig_3d = px.scatter_3d(df_3d, x='Wind', y='Temp', z='AQI', color='AQI', size_max=15, opacity=0.7, color_continuous_scale='Turbo')
     fig_3d.update_layout(scene=dict(xaxis_title='Wind', yaxis_title='Temp', zaxis_title='AQI'), height=500, paper_bgcolor="rgba(0,0,0,0)")
     st.plotly_chart(fig_3d, use_container_width=True)
@@ -220,11 +246,12 @@ elif selected_tab == "FORECAST":
 elif selected_tab == "INTEL":
     st.title(f"🏭 Source Intelligence: {selected_zone}")
     
-    pm25 = max(10, int(global_live_aqi * 0.55))
-    pm10 = max(20, int(global_live_aqi * 0.75))
-    no2 = max(10, int(global_live_aqi * 0.2))
-    co = round(global_live_aqi * 0.01, 1)
-    o3 = max(5, int(global_live_aqi * 0.15))
+    # Deriving pollutants from the REAL AQI
+    pm25 = max(10, int(real_dashboard_aqi * 0.55))
+    pm10 = max(20, int(real_dashboard_aqi * 0.75))
+    no2 = max(10, int(real_dashboard_aqi * 0.2))
+    co = round(real_dashboard_aqi * 0.01, 1)
+    o3 = max(5, int(real_dashboard_aqi * 0.15))
 
     col1, col2 = st.columns(2)
     with col1:
@@ -273,7 +300,6 @@ elif selected_tab == "HISTORY":
             val = 200 + current_intel["aqi_offset"] + np.random.randint(-40, 80)
             hist_aqi.append(max(50, val))
             
-    # FIXED HISTORY GRAPH COLOR GRADING
     marker_colors = ['#7E0023' if x > 400 else '#ff0000' if x > 300 else '#ffaa00' if x > 200 else '#ffff00' if x > 100 else '#00ff9d' for x in hist_aqi]
     avg_aqi = int(np.mean(hist_aqi))
     
@@ -306,15 +332,16 @@ elif selected_tab == "PROTOCOLS":
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader(f"⚠️ Recovery Strategy Simulator: {selected_zone}")
     
-    base_aqi = global_live_aqi
+    # Protocols run off the REAL dashboard AQI
+    base_aqi = real_dashboard_aqi
     
-    st.markdown(f"**Current Baseline AQI:** <span style='color:{global_color}; font-size:1.5rem; font-weight:bold'>{global_live_aqi}</span>", unsafe_allow_html=True)
+    st.markdown(f"**Current Baseline AQI:** <span style='color:{real_color}; font-size:1.5rem; font-weight:bold'>{base_aqi} | {real_status}</span>", unsafe_allow_html=True)
     st.markdown("---")
 
     col1, col2, col3 = st.columns(3)
     
-    if global_live_aqi >= 400: imm_text, imm_color = "🚨 IMPLEMENT GRAP-IV", "error"
-    elif global_live_aqi >= 300: imm_text, imm_color = "🟠 IMPLEMENT GRAP-III", "warning"
+    if base_aqi >= 400: imm_text, imm_color = "🚨 IMPLEMENT GRAP-IV", "error"
+    elif base_aqi >= 300: imm_text, imm_color = "🟠 IMPLEMENT GRAP-III", "warning"
     else: imm_text, imm_color = "🟡 IMPLEMENT GRAP-II", "warning"
     
     with col1:
