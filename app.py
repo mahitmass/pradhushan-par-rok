@@ -18,7 +18,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 2. CYBERPUNK CSS ---
+# --- 2. CYBERPUNK CSS --
 st.markdown("""
     <style>
     /* GLOBAL THEME */
