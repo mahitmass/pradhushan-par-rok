@@ -346,46 +346,70 @@ elif selected_tab == "PROTOCOLS":
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader(f"⚠️ Recovery Strategy Simulator: {selected_zone}")
     
-    # 1. Grab the exact Real AQI from the Dashboard
+    # Protocols run off the REAL dashboard AQI
     base_aqi = real_dashboard_aqi
     
-    # 2. STRICT LOGIC: Header Text
-    if base_aqi >= 400: 
-        curr_stage = "GRAP STAGE IV"
-    elif base_aqi >= 300: 
-        curr_stage = "GRAP STAGE III"
-    else: 
-        curr_stage = "GRAP STAGE II"
+    # 1. Header Text Logic
+    if base_aqi >= 400: curr_stage = "GRAP STAGE IV"
+    elif base_aqi >= 300: curr_stage = "GRAP STAGE III"
+    else: curr_stage = "GRAP STAGE II"
     
     st.markdown(f"**Current Baseline AQI:** <span style='color:{real_color}; font-size:1.5rem; font-weight:bold'>{base_aqi} | {curr_stage}</span>", unsafe_allow_html=True)
     st.markdown("---")
 
     col1, col2, col3 = st.columns(3)
     
-    # 3. STRICT LOGIC: Action Boxes
-    if base_aqi >= 400: imm_text, imm_color = "🚨 IMPLEMENT GRAP-IV", "error"
-    elif base_aqi >= 300: imm_text, imm_color = "🟠 IMPLEMENT GRAP-III", "warning"
-    else: imm_text, imm_color = "🟡 IMPLEMENT GRAP-II", "warning"
-    
+    # 2. DYNAMIC CASCADING LOGIC (Shifts all boxes depending on base AQI)
+    if base_aqi >= 400:
+        imm_text, imm_color = "🚨 IMPLEMENT GRAP-IV", "error"
+        imm_desc = "- Stop Construction\n- Ban Heavy Vehicles\n- Closure of Schools"
+        sec_text, sec_color = "🟠 SHIFT TO GRAP-III", "warning"
+        sec_desc = "- Ban Diesel BS-IV\n- Daily Road Sweeping\n- Off-Peak Metro"
+        stab_text, stab_color = "🟡 MAINTAIN GRAP-II", "info"
+        stab_desc = "- Water Sprinkling\n- Power Backup Ban\n- Traffic Management"
+    elif base_aqi >= 300:
+        imm_text, imm_color = "🟠 IMPLEMENT GRAP-III", "warning"
+        imm_desc = "- Ban Diesel BS-IV\n- Daily Road Sweeping\n- Off-Peak Metro"
+        sec_text, sec_color = "🟡 SHIFT TO GRAP-II", "info"
+        sec_desc = "- Water Sprinkling\n- Power Backup Ban\n- Traffic Management"
+        stab_text, stab_color = "🟢 MAINTAIN GRAP-I", "success"
+        stab_desc = "- Strict PUC Enforcement\n- Ban Garbage Burning\n- Dust Control"
+    else:
+        imm_text, imm_color = "🟡 IMPLEMENT GRAP-II", "warning"
+        imm_desc = "- Water Sprinkling\n- Power Backup Ban\n- Traffic Management"
+        sec_text, sec_color = "🟢 SHIFT TO GRAP-I", "success"
+        sec_desc = "- Strict PUC Enforcement\n- Ban Garbage Burning\n- Dust Control"
+        stab_text, stab_color = "🔵 NORMAL PROTOCOL", "info"
+        stab_desc = "- Monitor Hotspots\n- Routine Sweeping\n- Standard Traffic Mgmt"
+
+    # 3. Render the Dynamic Boxes
     with col1:
         st.markdown("#### 1️⃣ IMMEDIATE ACTION")
         if imm_color == "error": st.error(imm_text)
-        else: st.warning(imm_text)
-        st.markdown("- Stop Construction\n- Ban Heavy Vehicles\n- Closure of Schools")
+        elif imm_color == "warning": st.warning(imm_text)
+        else: st.info(imm_text)
+        st.markdown(imm_desc)
+        
         p1_aqi = int(base_aqi * 0.82)
         st.metric("Projected AQI", p1_aqi, delta=f"{p1_aqi - base_aqi}", delta_color="inverse")
     
     with col2:
         st.markdown("#### 2️⃣ SECONDARY PHASE")
-        st.info("🔄 SHIFT TO GRAP-II")
-        st.markdown("- Ban Diesel BS-IV\n- Daily Road Sweeping\n- Off-Peak Metro")
+        if sec_color == "warning": st.warning(sec_text)
+        elif sec_color == "info": st.info(sec_text)
+        else: st.success(sec_text)
+        st.markdown(sec_desc)
+        
         p2_aqi = int(p1_aqi * 0.88)
         st.metric("Projected AQI", p2_aqi, delta=f"{p2_aqi - p1_aqi}", delta_color="inverse")
 
     with col3:
         st.markdown("#### 3️⃣ STABILIZATION")
-        st.success("🟢 MAINTAIN GRAP-II")
-        st.markdown("- Water Sprinkling\n- Power Backup Ban\n- Traffic Management")
+        if stab_color == "info": st.info(stab_text)
+        elif stab_color == "success": st.success(stab_text)
+        else: st.warning(stab_text)
+        st.markdown(stab_desc)
+        
         p3_aqi = int(p2_aqi * 0.92)
         st.metric("Target AQI", p3_aqi, delta=f"{p3_aqi - p2_aqi}", delta_color="inverse")
 
