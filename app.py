@@ -51,12 +51,14 @@ anim_robot = load_lottieurl("https://lottie.host/7e04085b-5136-4074-8461-7667232
 def load_model():
     model_path = os.path.join('models', 'pollution_model.pkl')
     data_path = os.path.join('data', 'delhi_ncr_aqi_dataset.csv')
+    
     if os.path.exists(model_path):
         try:
             model = joblib.load(model_path)
             model.predict([[12, 1, 0, 25, 60, 5.0, 2.0]])
             return model
         except Exception: pass 
+
     try:
         if not os.path.exists(data_path): return None
         df = pd.read_csv(data_path)
@@ -78,17 +80,17 @@ model = load_model()
 c_logo, c_nav = st.columns([1, 4])
 with c_logo:
     st.title("AIRSCRIBE")
-    st.caption("NEXUS v12.0 (Synced & Dynamic)")
+    st.caption("NEXUS v11.0")
 with c_nav:
     selected_tab = st.radio("Navigation", ["DASHBOARD", "FORECAST", "INTEL", "HISTORY", "PROTOCOLS"], 
         horizontal=True, label_visibility="collapsed")
 
 st.divider()
 
-# --- 6. GLOBAL LOCATION & SYNCHRONIZED STATE ---
-# (Fix 1 & 3: Doing this at the top so ALL tabs share the exact same Live AQI)
+# --- 6. GLOBAL LOCATION SELECTOR ---
 st.markdown("### 📍 Select Monitoring Station")
 
+# Accurate Demographics Dictionary
 region_intel = {
     "Dwarka": {"aqi_offset": -15, "pop": 11.0, "schools": 32},
     "Rohini": {"aqi_offset": 10, "pop": 8.5, "schools": 45},
@@ -138,34 +140,20 @@ loc_data = {
 }
 
 c_loc1, c_loc2 = st.columns(2)
-with c_loc1: selected_city = st.selectbox("City", list(loc_data.keys()))
-with c_loc2: selected_zone = st.selectbox("Region/Zone", loc_data[selected_city][:30])
+with c_loc1:
+    selected_city = st.selectbox("City", list(loc_data.keys()))
+with c_loc2:
+    selected_zone = st.selectbox("Region/Zone", loc_data[selected_city][:30])
 
 # Dynamic Fallback
 dyn_offset = (len(selected_zone) * 12 + ord(selected_zone[0])) % 80 - 40
 dyn_schools = (len(selected_zone) * 3) % 25 + 5
-current_intel = {"aqi_offset": dyn_offset, "pop": 0.5, "schools": dyn_schools}
+current_intel = {"aqi_offset": dyn_offset, "pop": 0.5, "schools": dyn_schools} # 50k default
 
 for key in region_intel:
     if key in selected_zone:
         current_intel = region_intel[key]
         break
-
-# --- CALCULATE SINGLE SOURCE OF TRUTH (LIVE AQI) ---
-now = datetime.datetime.now()
-if model:
-    try:
-        base_pred = int(model.predict([[now.hour, now.month, now.weekday(), 18, 55, 6.0, 1.5]])[0])
-        hourly_modifier = int(15 * np.cos((now.hour - 8) * np.pi / 12))
-        global_live_aqi = base_pred + current_intel["aqi_offset"] + hourly_modifier
-    except: global_live_aqi = 345 
-else: global_live_aqi = 345 
-
-# Color & Status Logic
-if global_live_aqi > 400: global_status, global_color = "SEVERE", "#7E0023"
-elif global_live_aqi > 300: global_status, global_color = "VERY POOR", "#ff0000"
-elif global_live_aqi > 200: global_status, global_color = "POOR", "#ffaa00"
-else: global_status, global_color = "MODERATE", "#00ff9d"
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -183,12 +171,27 @@ if selected_tab == "DASHBOARD":
     c1, c2 = st.columns([2, 1])
     with c1:
         st.markdown(f"### ⚡ Real-Time Atmospheric Surveillance: {selected_zone}")
+        
+        now = datetime.datetime.now()
+        if model:
+            try:
+                pred = model.predict([[now.hour, now.month, now.weekday(), 18, 55, 6.0, 1.5]])[0]
+                hourly_modifier = int(15 * np.cos((now.hour - 8) * np.pi / 12))
+                live_aqi = int(pred) + current_intel["aqi_offset"] + hourly_modifier
+            except: live_aqi = 345 
+        else: live_aqi = 345 
+            
+        if live_aqi > 400: status, color = "SEVERE", "#7E0023"
+        elif live_aqi > 300: status, color = "VERY POOR", "#ff0000"
+        elif live_aqi > 200: status, color = "POOR", "#ffaa00"
+        else: status, color = "MODERATE", "#00ff9d"
+
         k1, k2, k3 = st.columns(3)
-        with k1: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {global_color}"><h3>AQI</h3><p class="metric-value" style="color:{global_color}">{global_live_aqi}</p></div>', unsafe_allow_html=True)
-        with k2: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {global_color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{global_status}</p></div>', unsafe_allow_html=True)
+        with k1: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {color}"><h3>AQI</h3><p class="metric-value" style="color:{color}">{live_aqi}</p></div>', unsafe_allow_html=True)
+        with k2: st.markdown(f'<div class="glass-card" style="border-left: 4px solid {color}"><h3>STATUS</h3><p class="metric-value" style="font-size:1.8rem; padding-top:10px">{status}</p></div>', unsafe_allow_html=True)
         with k3:
-            crisis_multiplier = 2.5 if global_live_aqi >= 450 else 1.5 if global_live_aqi >= 400 else 1.0
-            eco_loss = round((global_live_aqi * 0.005) * current_intel["pop"] * crisis_multiplier, 2)
+            crisis_multiplier = 2.5 if live_aqi >= 450 else 1.5 if live_aqi >= 400 else 1.0
+            eco_loss = round((live_aqi * 0.005) * current_intel["pop"] * crisis_multiplier, 2)
             st.markdown(f'<div class="glass-card" style="border-left: 4px solid #00d4ff"><h3>ECONOMY LOSS</h3><p class="metric-value" style="color:#00d4ff">₹{eco_loss} Cr</p><p class="sub-metric">Daily Estimate</p></div>', unsafe_allow_html=True)
 
         d1, d2 = st.columns([1, 2])
@@ -209,9 +212,9 @@ if selected_tab == "DASHBOARD":
         if anim_robot: st_lottie(anim_robot, height=250, key="robot")
         st.markdown("### 🌊 24-Hour Trend")
         hours = list(range(24))
-        trend_vals = [global_live_aqi - 50 + (80 if 8<=h<=10 else 100 if 17<=h<=19 else 0) + np.random.randint(-10, 10) for h in hours]
+        trend_vals = [live_aqi - 50 + (80 if 8<=h<=10 else 100 if 17<=h<=19 else 0) + np.random.randint(-10, 10) for h in hours]
         fig_trend = px.area(x=hours, y=trend_vals)
-        fig_trend.update_traces(line_color=global_color, fillcolor=f"rgba({int(global_color[1:3],16)}, {int(global_color[3:5],16)}, {int(global_color[5:7],16)}, 0.3)")
+        fig_trend.update_traces(line_color=color, fillcolor=f"rgba({int(color[1:3],16)}, {int(color[3:5],16)}, {int(color[5:7],16)}, 0.3)")
         fig_trend.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#a0a0a0", height=250, margin=dict(l=0,r=0,t=0,b=0))
         st.plotly_chart(fig_trend, use_container_width=True)
 
@@ -220,7 +223,7 @@ if selected_tab == "DASHBOARD":
         'lat': [28.6139, 28.5355, 28.7041, 28.4595, 28.6692],
         'lon': [77.2090, 77.3910, 77.1025, 77.0266, 77.2285],
         'Location': ['Delhi Central', 'Noida Core', 'North Delhi', 'Gurugram', 'East Delhi'],
-        'AQI': [global_live_aqi, global_live_aqi-15, global_live_aqi+20, global_live_aqi-10, global_live_aqi+35]
+        'AQI': [live_aqi, live_aqi-15, live_aqi+20, live_aqi-10, live_aqi+35]
     })
     fig_map = px.scatter_mapbox(map_data, lat="lat", lon="lon", hover_name="Location", color="AQI", size="AQI", color_continuous_scale=px.colors.cyclical.IceFire, size_max=15, zoom=9)
     fig_map.update_layout(mapbox_style="carto-darkmatter", paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=0, r=0, t=0, b=0), height=400)
@@ -250,8 +253,6 @@ elif selected_tab == "FORECAST":
                     weather_data = req.json()
                     
                     target_time_str = f"{in_date.strftime('%Y-%m-%d')}T{in_time:02d}:00"
-                    
-                    # Fix 2: Dynamic Fallback Generator for dates outside the 7-day API range
                     if target_time_str in weather_data['hourly']['time']:
                         idx = weather_data['hourly']['time'].index(target_time_str)
                         in_temp = round(weather_data['hourly']['temperature_2m'][idx], 1)
@@ -259,18 +260,8 @@ elif selected_tab == "FORECAST":
                         in_wind = round(weather_data['hourly']['wind_speed_10m'][idx], 1)
                         in_vis = round(weather_data['hourly']['visibility'][idx] / 1000.0, 1)
                     else:
-                        st.warning("⚠️ Date outside API window. Simulating historical/seasonal parameters.")
-                        np.random.seed(in_date.toordinal() + in_time) # Deterministic randomness based on exact date/hour
-                        
-                        # Seasonality logic (Winter = colder, Summer = hotter)
-                        if in_date.month in [11, 12, 1, 2]: base_t = 15.0
-                        elif in_date.month in [4, 5, 6]: base_t = 38.0
-                        else: base_t = 28.0
-                        
-                        in_temp = round(base_t + np.random.uniform(-4, 4), 1)
-                        in_humid = round(50.0 + np.random.uniform(-15, 20), 1)
-                        in_wind = round(5.0 + np.random.uniform(0, 8), 1)
-                        in_vis = round(2.0 + np.random.uniform(-0.5, 1.5), 1)
+                        in_temp, in_humid, in_wind, in_vis = 20.0, 60.0, 5.0, 2.0
+                        st.warning("⚠️ Date out of 7-day API forecast range. Using fallback averages.")
 
                 st.markdown("##### 📡 Intercepted Meteorological Forecast")
                 m1, m2, m3, m4 = st.columns(4)
@@ -280,17 +271,13 @@ elif selected_tab == "FORECAST":
                 m4.metric("Visibility", f"{in_vis} km")
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # Fix 3: Enforcing Strict Physical Relationships for the AI Model
+                # APPLY DYNAMIC ACCURACY MODIFIERS
                 f_inputs = [[in_time, in_date.month, in_date.weekday(), in_temp, in_humid, in_wind, in_vis]]
                 base_pred = int(model.predict(f_inputs)[0])
                 
-                # Math enforcer: Wind scatters pollution (AQI drops). High humidity traps it (AQI rises).
-                wind_effect = (in_wind - 5.0) * -8   
-                humid_effect = (in_humid - 50.0) * 0.5 
-                diurnal_curve = int(15 * np.cos((in_time - 8) * np.pi / 12)) 
-                
-                pred_aqi = int(base_pred + current_intel["aqi_offset"] + wind_effect + humid_effect + diurnal_curve)
-                pred_aqi = max(50, pred_aqi) # Prevent impossible negative AQI
+                # Diurnal Curve + Zone Penalty ensures numbers change hourly AND by location!
+                hourly_modifier = int(15 * np.cos((in_time - 8) * np.pi / 12)) 
+                pred_aqi = base_pred + current_intel["aqi_offset"] + hourly_modifier
                 
                 if pred_aqi > 400: risk = "EXTREME"
                 elif pred_aqi > 300: risk = "HIGH"
@@ -329,7 +316,6 @@ elif selected_tab == "INTEL":
     seed = int(intel_date.strftime("%Y%m%d")) + intel_hour + sum([ord(c) for c in selected_zone])
     np.random.seed(seed)
     
-    # Uses the Global AQI offset to stay realistic
     base_intel_aqi = 300 + current_intel["aqi_offset"] + int(15 * np.cos((intel_hour - 8) * np.pi / 12)) + np.random.randint(-20, 20)
     
     pm25 = max(50, int(base_intel_aqi * 0.55 + np.random.randint(-10, 20)))
@@ -367,12 +353,13 @@ elif selected_tab == "HISTORY":
         
     dates = pd.date_range(end=datetime.date.today(), periods=days).tolist()
     
+    # DETERMINISTIC GENERATION: Colors will never randomly jump again
     hist_aqi = []
     for d in dates:
         seed = int(d.strftime("%Y%m%d")) + sum([ord(c) for c in selected_zone])
         np.random.seed(seed)
         daily_aqi = 250 + current_intel["aqi_offset"] + np.random.randint(-60, 100)
-        hist_aqi.append(max(50, daily_aqi)) 
+        hist_aqi.append(max(50, daily_aqi)) # Prevent negative AQI
         
     marker_colors = ['#ff0000' if x > 400 else '#ffaa00' if x > 250 else '#00ff9d' for x in hist_aqi]
     
@@ -383,6 +370,8 @@ elif selected_tab == "HISTORY":
     st.plotly_chart(fig_hist, use_container_width=True)
 
     st.markdown("### 🌫️ Smog Composition Analysis")
+    
+    # Reset seed for consistent graph rendering
     np.random.seed(sum([ord(c) for c in selected_zone]))
     fog = np.random.randint(10, 40, size=days)
     smoke = np.random.randint(20, 50, size=days)
@@ -403,10 +392,17 @@ elif selected_tab == "PROTOCOLS":
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
     st.subheader(f"⚠️ Recovery Strategy Simulator: {selected_zone}")
     
-    # Fix 1: Protocol tab is now locked perfectly to the Global Live AQI
-    base_aqi = global_live_aqi
+    # Use real-time base prediction for realistic modeling
+    base_aqi = 300 + current_intel["aqi_offset"] + np.random.randint(50, 120)
     
-    st.markdown(f"**Current Status:** <span style='color:{global_color}; font-size:1.5rem; font-weight:bold'>{base_aqi} | {global_status}</span>", unsafe_allow_html=True)
+    if base_aqi >= 450:
+        curr_color, curr_stage = "#ff0000", "GRAP STAGE IV (SEVERE+)"
+    elif base_aqi >= 400:
+        curr_color, curr_stage = "#7E0023", "GRAP STAGE III (SEVERE)"
+    else:
+        curr_color, curr_stage = "#ffaa00", "GRAP STAGE II"
+
+    st.markdown(f"**Current Status:** <span style='color:{curr_color}; font-size:1.5rem; font-weight:bold'>{base_aqi} | {curr_stage}</span>", unsafe_allow_html=True)
     st.markdown("---")
 
     col1, col2, col3 = st.columns(3)
